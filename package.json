@@ -26,8 +26,9 @@
     "@uiw/react-codemirror": "^4.23.12",
     "better-sqlite3": "^11.8.1",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
     "dockerode": "^4.0.7",
+    "express": "^4.21.2",
+    "lucide-react": "^1.39.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.5"

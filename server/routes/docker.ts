@@ -9,6 +9,7 @@ import {
   getContainerLogs,
   isDockerEnabled,
   listContainers,
+  inspectContainer,
   pullAndRecreateContainer,
   pullImage,
   restartContainer,
@@ -45,6 +46,15 @@ router.get("/containers", async (req: Request, res: Response) => {
     res.json({ containers });
   } catch {
     res.status(500).json({ error: "Failed to list containers" });
+  }
+});
+
+router.get("/containers/:id", async (req: Request, res: Response) => {
+  try {
+    const details = await inspectContainer(String(req.params.id));
+    res.json(details);
+  } catch {
+    res.status(500).json({ error: "Failed to inspect container" });
   }
 });
 

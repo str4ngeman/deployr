@@ -125,6 +125,29 @@ export function listContainers(options?: {
   return apiFetch(`/api/docker/containers${query ? `?${query}` : ""}`);
 }
 
+export interface ContainerDetails {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  running: boolean;
+  status: string;
+  created: string;
+  startedAt: string;
+  finishedAt: string;
+  restartCount: number;
+  platform: string;
+  ports: Array<{ host: string; container: string }>;
+  labels: Record<string, string>;
+  envCount: number;
+  mounts: Array<{ source: string; destination: string; mode: string }>;
+  isGhcr: boolean;
+}
+
+export function getContainerDetails(containerId: string): Promise<ContainerDetails> {
+  return apiFetch(`/api/docker/containers/${containerId}`);
+}
+
 export function getContainerLogs(
   containerId: string,
   tail = 100,

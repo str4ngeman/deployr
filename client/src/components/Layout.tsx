@@ -1,24 +1,49 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  FileCode2,
+  Container,
+  ScrollText,
+  Settings,
+  Hexagon,
+  Circle,
+} from "lucide-react";
+import { getHealth } from "../lib/api";
+import { cn } from "./ui";
 
 const navItems = [
-  { to: "/editor", label: "File Editor", icon: FileIcon },
-  { to: "/apps", label: "Apps Manager", icon: AppsIcon },
-  { to: "/logs", label: "Logs Viewer", icon: LogsIcon },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/editor", label: "Files", icon: FileCode2, description: "Browse & edit" },
+  { to: "/apps", label: "Apps", icon: Container, description: "Containers" },
+  { to: "/logs", label: "Logs", icon: ScrollText, description: "Live streams" },
+  { to: "/settings", label: "Settings", icon: Settings, description: "Configure" },
 ];
 
 export function Layout() {
+  const location = useLocation();
+  const [dockerConnected, setDockerConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getHealth()
+      .then((h) => setDockerConnected(h.docker.connected))
+      .catch(() => setDockerConnected(false));
+  }, [location.pathname]);
+
   return (
-    <div className="flex h-screen">
-      <aside className="w-56 shrink-0 border-r border-border bg-surface-raised flex flex-col">
-        <Link to="/" className="px-4 py-5 border-b border-border hover:bg-surface-overlay transition-colors">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-              <DeployIcon />
+    <div className="flex h-screen bg-surface">
+      <aside className="w-60 shrink-0 border-r border-border bg-surface-raised flex flex-col">
+        <Link
+          to="/"
+          className="px-4 py-4 border-b border-border hover:bg-surface-overlay transition-colors group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-lg shadow-accent/25 group-hover:shadow-accent/40 transition-shadow">
+              <Hexagon size={18} className="text-white" strokeWidth={2.5} />
             </div>
             <div>
-              <h1 className="text-sm font-semibold tracking-tight">Deployr</h1>
-              <p className="text-[11px] text-text-muted">VPS Manager</p>
+              <h1 className="text-sm font-bold tracking-tight">Deployr</h1>
+              <p className="text-[10px] text-text-faint font-medium uppercase tracking-widest">VPS Manager</p>
             </div>
           </div>
         </Link>
@@ -28,94 +53,48 @@ export function Layout() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150",
                   isActive
-                    ? "bg-accent/15 text-accent font-medium"
-                    : "text-text-muted hover:text-text hover:bg-surface-overlay"
-                }`
+                    ? "bg-accent-muted text-accent font-medium shadow-sm"
+                    : "text-text-muted hover:text-text hover:bg-surface-overlay",
+                )
               }
             >
-              <item.icon />
-              {item.label}
+              <item.icon size={18} strokeWidth={1.75} className="shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="block">{item.label}</span>
+                {item.description && (
+                  <span className="block text-[10px] text-text-faint font-normal">{item.description}</span>
+                )}
+              </div>
             </NavLink>
           ))}
         </nav>
+
+        <div className="px-4 py-3 border-t border-border">
+          <div className="flex items-center gap-2 text-xs">
+            <Circle
+              size={8}
+              className={cn(
+                "fill-current",
+                dockerConnected === null && "text-text-faint animate-pulse-soft",
+                dockerConnected === true && "text-success",
+                dockerConnected === false && "text-danger",
+              )}
+            />
+            <span className="text-text-muted">
+              Docker {dockerConnected === null ? "..." : dockerConnected ? "connected" : "offline"}
+            </span>
+          </div>
+        </div>
       </aside>
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden flex flex-col">
         <Outlet />
       </main>
     </div>
-  );
-}
-
-function DeployIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path
-        d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M8 6V10M6 7.5H10"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
-      <path
-        d="M3 2h6l4 4v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-      <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function AppsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
-      <rect x="2" y="5" width="12" height="9" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M5 5V3.5A1.5 1.5 0 016.5 2h3A1.5 1.5 0 0111 3.5V5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2 8.5h12" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-function LogsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
-      <path
-        d="M2 4h12M2 8h8M2 12h10"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
-      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
-      <path
-        d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }

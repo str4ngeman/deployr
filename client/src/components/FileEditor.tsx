@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { FileCode2, Save } from "lucide-react";
 import { readFile, writeFile } from "../lib/api";
 import { formatBytes, formatDate, getLanguageExtension } from "../lib/utils";
+import { Badge, Button, EmptyState, LoadingOverlay } from "./ui";
 
 interface FileEditorProps {
   filePath: string | null;
@@ -80,53 +82,47 @@ export function FileEditor({ filePath }: FileEditorProps) {
 
   if (!filePath) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted">
-        <div className="text-center">
-          <EmptyIcon />
-          <p className="mt-3 text-sm">Select a file to edit</p>
-          <p className="mt-1 text-xs">Browse the file tree on the left</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={<FileCode2 size={24} />}
+        title="No file selected"
+        description="Choose a file from the explorer to start editing"
+      />
     );
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-surface-raised shrink-0">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-surface-raised shrink-0">
+        <FileCode2 size={16} className="text-accent shrink-0" />
         <span className="text-sm font-mono truncate flex-1">{filePath}</span>
         {meta && (
-          <span className="text-[11px] text-text-muted shrink-0 hidden sm:inline">
+          <span className="text-[11px] text-text-faint shrink-0 hidden sm:inline">
             {formatBytes(meta.size)} · {formatDate(meta.modified)}
           </span>
         )}
-        {isDirty && (
-          <span className="text-[11px] text-warning shrink-0">Modified</span>
-        )}
-        {saveMessage && (
-          <span className="text-[11px] text-success shrink-0">{saveMessage}</span>
-        )}
-        <button
+        {isDirty && <Badge variant="warning">Unsaved</Badge>}
+        {saveMessage && <Badge variant="success">{saveMessage}</Badge>}
+        <Button
+          variant="primary"
+          size="sm"
+          icon={<Save size={13} />}
           onClick={handleSave}
-          disabled={!isDirty || saving}
-          className="px-3 py-1 text-xs font-medium rounded-md bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          disabled={!isDirty}
+          loading={saving}
         >
-          {saving ? "Saving..." : "Save"}
-        </button>
+          Save
+        </Button>
       </div>
 
       {error && (
-        <div className="px-4 py-2 text-xs text-danger bg-danger/10 border-b border-danger/20">
+        <div className="px-4 py-2 text-xs text-danger bg-danger-muted border-b border-danger/20">
           {error}
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center h-full text-text-muted text-sm">
-            Loading...
-          </div>
-        ) : (
-          <CodeMirror
+      <div className="flex-1 overflow-hidden relative">
+        {loading && <LoadingOverlay message="Loading file..." />}
+        <CodeMirror
             value={content}
             height="100%"
             theme={oneDark}
@@ -140,23 +136,7 @@ export function FileEditor({ filePath }: FileEditorProps) {
               bracketMatching: true,
             }}
           />
-        )}
       </div>
     </div>
-  );
-}
-
-function EmptyIcon() {
-  return (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="mx-auto opacity-30">
-      <path
-        d="M10 8h18l10 10v24a2 2 0 01-2 2H10a2 2 0 01-2-2V10a2 2 0 012-2z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path d="M28 8v10h10" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M16 28h16M16 34h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
   );
 }

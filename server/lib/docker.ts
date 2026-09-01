@@ -275,3 +275,61 @@ export async function pullAndRecreateContainer(containerId: string): Promise<voi
 
   await created.start();
 }
+
+export interface ContainerDetails {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  running: boolean;
+  status: string;
+  created: string;
+  startedAt: string;
+  finishedAt: string;
+  restartCount: number;
+  platform: string;
+  ports: Array<{ host: string; container: string }>;
+  labels: Record<string, string>;
+  envCount: number;
+  mounts: Array<{ source: string; destination: string; mode: string }>;
+  isGhcr: boolean;
+}
+
+export async function inspectContainer(containerId: string): Promise<ContainerDetails> {
+  const client = getDocker();
+  if (!client) throw new Error("Docker is not enabled");
+
+  const container = client.getContainer(containerId);
+  const data = await container.inspect();
+
+  const ports = Object.entries(data.NetworkSettings.Ports ?? {})
+    .flatMap(([containerPort, bindings]) =>
+      (bindings ?? []).map((b) => ({
+        host: `${b.HostIp === "0.0.0.0" || b.HostIp === "" ? "*" : b.HostIp}:${b.HostPort}`,
+        container: containerPort.replace("/tcp", "").replace("/udp", ""),
+      })),
+    );
+
+  return {
+    id: data.Id,
+    name: data.Name.replace(/^\//, ""),
+    image: data.Config.Image,
+    state: data.State.Status,
+    running: data.State.Running,
+    status: data.State.Status,
+    created: data.Created,
+    startedAt: data.State.StartedAt,
+    finishedAt: data.State.FinishedAt,
+    restartCount: data.RestartCount,
+    platform: data.Platform || "linux",
+    ports,
+    labels: data.Config.Labels ?? {},
+    envCount: data.Config.Env?.length ?? 0,
+    mounts: (data.Mounts ?? []).map((m) => ({
+      source: m.Source,
+      destination: m.Destination,
+      mode: m.Mode,
+    })),
+    isGhcr: data.Config.Image.includes("ghcr.io"),
+  };
+}

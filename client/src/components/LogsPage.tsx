@@ -1,4 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  ScrollText,
+  RefreshCw,
+  Radio,
+  Eye,
+  EyeOff,
+  Filter,
+  Terminal,
+  Pause,
+  Play,
+  ChevronDown,
+} from "lucide-react";
 import {
   getContainerLogs,
   getDockerStatus,
@@ -8,10 +21,21 @@ import {
   streamContainerLogs,
   type ContainerInfo,
 } from "../lib/api";
+import {
+  Alert,
+  Badge,
+  Button,
+  EmptyState,
+  IconButton,
+  ListSkeleton,
+  StatusBadge,
+  cn,
+} from "./ui";
 
 const TAIL_OPTIONS = [50, 100, 200, 500] as const;
 
 export function LogsPage() {
+  const [searchParams] = useSearchParams();
   const [containers, setContainers] = useState<ContainerInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState("");
@@ -21,14 +45,17 @@ export function LogsPage() {
   const [tail, setTail] = useState<number>(100);
   const [showHidden, setShowHidden] = useState(false);
   const [runningOnly, setRunningOnly] = useState(true);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [dockerConnected, setDockerConnected] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const logContainerRef = useRef<HTMLPreElement>(null);
   const stopStreamRef = useRef<(() => void) | null>(null);
 
   const scrollToBottom = useCallback(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+    if (autoScroll) logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [autoScroll]);
 
   const loadContainers = useCallback(async () => {
     setLoading(true);
@@ -40,12 +67,13 @@ export function LogsPage() {
         setError("Cannot connect to Docker. Is docker.sock mounted?");
         return;
       }
-      const data = await listContainers({
-        includeHidden: showHidden,
-        all: !runningOnly,
-      });
+      const data = await listContainers({ includeHidden: showHidden, all: !runningOnly });
       setContainers(data.containers);
-      if (data.containers.length > 0 && !selectedId) {
+
+      const paramId = searchParams.get("container");
+      if (paramId && data.containers.find((c) => c.id === paramId)) {
+        setSelectedId(paramId);
+      } else if (data.containers.length > 0 && !selectedId) {
         setSelectedId(data.containers[0].id);
       } else if (selectedId && !data.containers.find((c) => c.id === selectedId)) {
         setSelectedId(data.containers[0]?.id ?? null);
@@ -55,7 +83,7 @@ export function LogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedId, showHidden, runningOnly]);
+  }, [selectedId, showHidden, runningOnly, searchParams]);
 
   const handleHide = async (container: ContainerInfo, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -71,50 +99,41 @@ export function LogsPage() {
     }
   };
 
-  const loadLogs = useCallback(
-    async (containerId: string, tailLines: number) => {
-      setLogsLoading(true);
-      setError(null);
-      try {
-        const data = await getContainerLogs(containerId, tailLines);
-        setLogs(data.logs || "(no logs)");
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load logs");
-      } finally {
+  const loadLogs = useCallback(async (containerId: string, tailLines: number) => {
+    setLogsLoading(true);
+    setError(null);
+    try {
+      const data = await getContainerLogs(containerId, tailLines);
+      setLogs(data.logs || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load logs");
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
+  const startFollowing = useCallback((containerId: string, tailLines: number) => {
+    stopStreamRef.current?.();
+    setLogs("");
+    setLogsLoading(true);
+    setError(null);
+
+    const stop = streamContainerLogs(
+      containerId,
+      tailLines,
+      (text) => {
         setLogsLoading(false);
-      }
-    },
-    [],
-  );
-
-  const startFollowing = useCallback(
-    (containerId: string, tailLines: number) => {
-      stopStreamRef.current?.();
-      setLogs("");
-      setLogsLoading(true);
-      setError(null);
-
-      const stop = streamContainerLogs(
-        containerId,
-        tailLines,
-        (text) => {
-          setLogsLoading(false);
-          setLogs((prev) => {
-            const next = prev + text;
-            const lines = next.split("\n");
-            if (lines.length > tailLines + 50) {
-              return lines.slice(-tailLines).join("\n");
-            }
-            return next;
-          });
-        },
-        (message) => setError(message),
-      );
-
-      stopStreamRef.current = stop;
-    },
-    [],
-  );
+        setLogs((prev) => {
+          const next = prev + text;
+          const lines = next.split("\n");
+          if (lines.length > tailLines + 50) return lines.slice(-tailLines).join("\n");
+          return next;
+        });
+      },
+      (message) => setError(message),
+    );
+    stopStreamRef.current = stop;
+  }, []);
 
   useEffect(() => {
     getSettings()
@@ -127,291 +146,177 @@ export function LogsPage() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    loadContainers();
-  }, [loadContainers]);
+  useEffect(() => { loadContainers(); }, [loadContainers]);
 
   useEffect(() => {
     if (!selectedId) return;
-
     stopStreamRef.current?.();
     stopStreamRef.current = null;
-
-    if (following) {
-      startFollowing(selectedId, tail);
-    } else {
-      loadLogs(selectedId, tail);
-    }
-
-    return () => {
-      stopStreamRef.current?.();
-      stopStreamRef.current = null;
-    };
+    if (following) startFollowing(selectedId, tail);
+    else loadLogs(selectedId, tail);
+    return () => { stopStreamRef.current?.(); stopStreamRef.current = null; };
   }, [selectedId, following, tail, loadLogs, startFollowing]);
 
-  useEffect(() => {
-    if (following) scrollToBottom();
-  }, [logs, following, scrollToBottom]);
+  useEffect(() => { scrollToBottom(); }, [logs, scrollToBottom]);
 
   const selected = containers.find((c) => c.id === selectedId);
+  const filteredContainers = containers.filter((c) =>
+    !search.trim() || c.name.toLowerCase().includes(search.toLowerCase()) || c.image.toLowerCase().includes(search.toLowerCase()),
+  );
 
   const handleRefresh = () => {
     if (!selectedId) return;
-    if (following) {
-      startFollowing(selectedId, tail);
-    } else {
-      loadLogs(selectedId, tail);
-    }
+    if (following) startFollowing(selectedId, tail);
+    else loadLogs(selectedId, tail);
   };
+
+  const lineCount = logs ? logs.split("\n").length : 0;
 
   return (
     <div className="flex h-full">
-      <div className="w-80 shrink-0 border-r border-border bg-surface-raised flex flex-col">
-        <div className="px-3 py-2.5 border-b border-border flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-            Containers
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setRunningOnly((prev) => !prev)}
-              className={`p-1 rounded transition-colors ${
-                runningOnly
-                  ? "text-success bg-success/15"
-                  : "text-text-muted hover:text-text hover:bg-surface-overlay"
-              }`}
-              title={runningOnly ? "Showing running only" : "Showing all containers"}
-            >
-              <RunningIcon active={runningOnly} />
-            </button>
-            <button
-              onClick={() => setShowHidden((prev) => !prev)}
-              className={`p-1 rounded transition-colors ${
-                showHidden
-                  ? "text-accent bg-accent/15"
-                  : "text-text-muted hover:text-text hover:bg-surface-overlay"
-              }`}
-              title={showHidden ? "Hide hidden containers" : "Show hidden containers"}
-            >
-              <EyeIcon open={showHidden} />
-            </button>
-            <button
-              onClick={loadContainers}
-              className="p-1 rounded hover:bg-surface-overlay text-text-muted hover:text-text transition-colors"
-              title="Refresh"
-            >
-              <RefreshIcon />
-            </button>
+      {/* Sidebar */}
+      <div className="w-72 shrink-0 border-r border-border bg-surface-raised flex flex-col">
+        <div className="p-3 border-b border-border space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ScrollText size={16} className="text-accent" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Containers</span>
+            </div>
+            <div className="flex items-center gap-0.5">
+              <IconButton active={runningOnly} onClick={() => setRunningOnly((p) => !p)} title="Running only">
+                <Filter size={14} />
+              </IconButton>
+              <IconButton active={showHidden} onClick={() => setShowHidden((p) => !p)} title="Show hidden">
+                {showHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+              </IconButton>
+              <IconButton onClick={loadContainers} title="Refresh">
+                <RefreshCw size={14} className={loading ? "animate-spin-slow" : ""} />
+              </IconButton>
+            </div>
           </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter..."
+            className="w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-text placeholder:text-text-faint focus:outline-none focus:border-accent/50"
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto py-1">
-          {loading && (
-            <p className="px-3 py-2 text-xs text-text-muted">Loading...</p>
-          )}
-          {error && !selectedId && (
-            <p className="px-3 py-2 text-xs text-danger">{error}</p>
-          )}
-          {!loading && !error && containers.length === 0 && (
-            <p className="px-3 py-2 text-xs text-text-muted">No running containers</p>
-          )}
-          {containers.map((container) => (
-            <div
-              key={container.id}
-              className={`flex items-stretch border-b border-border-subtle ${
-                selectedId === container.id ? "bg-accent/15" : "hover:bg-surface-overlay"
-              }`}
-            >
-              <button
-                onClick={() => setSelectedId(container.id)}
-                className="flex-1 text-left px-3 py-2.5 min-w-0"
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <ListSkeleton count={5} />
+          ) : filteredContainers.length === 0 ? (
+            <EmptyState
+              icon={<Terminal size={20} />}
+              title="No containers"
+              description={runningOnly ? "No running containers" : "No containers match filter"}
+            />
+          ) : (
+            filteredContainers.map((container) => (
+              <div
+                key={container.id}
+                className={cn(
+                  "flex items-stretch border-b border-border-subtle transition-colors",
+                  selectedId === container.id ? "bg-accent-muted" : "hover:bg-surface-overlay",
+                )}
               >
-                <div className="flex items-center gap-2">
-                  <StatusDot state={container.state} />
-                  <span className="text-sm font-medium truncate">{container.name}</span>
-                  {container.hidden && (
-                    <span className="text-[10px] text-text-muted">(hidden)</span>
-                  )}
-                </div>
-                <p className="mt-1 text-[11px] text-text-muted truncate pl-4">
-                  {container.image}
-                </p>
-                <p className="text-[10px] text-text-muted pl-4">{container.ports}</p>
-              </button>
-              {!container.hidden && (
-                <button
-                  onClick={(e) => handleHide(container, e)}
-                  className="px-2 text-text-muted hover:text-text transition-colors"
-                  title="Hide from logs list"
-                >
-                  <EyeOffIcon />
+                <button onClick={() => setSelectedId(container.id)} className="flex-1 text-left px-3 py-3 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <StatusBadge state={container.state} />
+                    {container.hidden && <Badge variant="muted">hidden</Badge>}
+                  </div>
+                  <p className="text-sm font-medium truncate mt-1">{container.name}</p>
+                  <p className="text-[10px] text-text-faint font-mono truncate mt-0.5">{container.image}</p>
                 </button>
-              )}
-            </div>
-          ))}
+                {!container.hidden && (
+                  <button onClick={(e) => handleHide(container, e)} className="px-2.5 text-text-faint hover:text-text transition-colors" title="Hide">
+                    <EyeOff size={13} />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
 
+      {/* Log viewer */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-2 border-b border-border bg-surface-raised flex items-center gap-3 shrink-0">
+        <div className="px-4 py-3 border-b border-border bg-surface-raised flex items-center gap-3 shrink-0">
           <div className="flex-1 min-w-0">
-            <span className="text-sm font-mono truncate block">
-              {selected?.name || "Select a container"}
-            </span>
-            {selected && (
-              <span className="text-[11px] text-text-muted">{selected.status}</span>
+            {selected ? (
+              <>
+                <p className="text-sm font-semibold truncate">{selected.name}</p>
+                <p className="text-[11px] text-text-faint">{selected.status}</p>
+              </>
+            ) : (
+              <p className="text-sm text-text-muted">Select a container</p>
             )}
           </div>
 
-          <label className="flex items-center gap-1.5 text-xs text-text-muted">
-            <span>Tail</span>
+          <div className="flex items-center gap-1 text-[10px] text-text-faint">
+            {lineCount > 0 && <span>{lineCount} lines</span>}
+            {following && <Badge variant="success"><Radio size={10} /> Live</Badge>}
+          </div>
+
+          <div className="relative">
             <select
               value={tail}
               onChange={(e) => setTail(Number(e.target.value))}
-              className="bg-surface border border-border rounded px-2 py-1 text-text text-xs"
+              className="appearance-none bg-surface-overlay border border-border rounded-lg pl-3 pr-7 py-1.5 text-xs text-text focus:outline-none focus:border-accent/50"
             >
-              {TAIL_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
+              {TAIL_OPTIONS.map((n) => <option key={n} value={n}>Tail {n}</option>)}
             </select>
-          </label>
+            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-text-faint pointer-events-none" />
+          </div>
 
-          <button
-            onClick={() => setFollowing((prev) => !prev)}
-            className={`px-3 py-1 text-xs font-medium rounded-md border transition-colors ${
-              following
-                ? "border-success/40 bg-success/15 text-success"
-                : "border-border hover:bg-surface-overlay text-text-muted"
-            }`}
+          <Button
+            size="sm"
+            variant={following ? "success" : "secondary"}
+            icon={following ? <Pause size={13} /> : <Play size={13} />}
+            onClick={() => setFollowing((p) => !p)}
           >
-            {following ? "Following" : "Follow"}
-          </button>
+            {following ? "Live" : "Paused"}
+          </Button>
 
-          <button
-            onClick={handleRefresh}
-            disabled={logsLoading}
-            className="px-3 py-1 text-xs font-medium rounded-md border border-border hover:bg-surface-overlay disabled:opacity-40 transition-colors"
-          >
-            {logsLoading ? "Loading..." : "Refresh"}
-          </button>
+          <IconButton active={autoScroll} onClick={() => setAutoScroll((p) => !p)} title="Auto-scroll">
+            <ChevronDown size={14} />
+          </IconButton>
+
+          <Button size="sm" icon={<RefreshCw size={13} />} onClick={handleRefresh} loading={logsLoading}>
+            Refresh
+          </Button>
         </div>
 
-        {error && selectedId && (
-          <div className="px-4 py-2 text-xs text-danger bg-danger/10 border-b border-danger/20">
+        {error && (
+          <Alert variant="danger" onDismiss={() => setError(null)} className="m-3 mb-0">
             {error}
-          </div>
+          </Alert>
         )}
 
-        <pre className="flex-1 overflow-auto p-4 text-xs font-mono leading-relaxed text-text-muted bg-surface whitespace-pre-wrap">
-          {!dockerConnected
-            ? "Docker not connected"
-            : logsLoading && !logs
-              ? "Loading logs..."
-              : logs || "Select a container to view logs"}
-          <div ref={logEndRef} />
-        </pre>
+        <div className="flex-1 relative overflow-hidden">
+          <pre
+            ref={logContainerRef}
+            className="h-full overflow-auto p-4 text-[11px] font-mono leading-relaxed text-emerald-400/90 bg-[#0a0a0c] whitespace-pre-wrap"
+          >
+            {!dockerConnected ? (
+              <span className="text-text-faint">Docker not connected</span>
+            ) : logsLoading && !logs ? (
+              <span className="text-text-faint animate-pulse-soft">Connecting to log stream...</span>
+            ) : logs ? (
+              logs
+            ) : (
+              <span className="text-text-faint">Select a container to view logs</span>
+            )}
+            <div ref={logEndRef} />
+          </pre>
+          {logsLoading && logs && (
+            <div className="absolute top-3 right-3">
+              <Badge variant="accent"><Radio size={10} className="animate-pulse-soft" /> Streaming</Badge>
+            </div>
+          )}
+        </div>
       </div>
     </div>
-  );
-}
-
-function StatusDot({ state }: { state: string }) {
-  const color =
-    state === "running"
-      ? "bg-success"
-      : state === "exited"
-        ? "bg-text-muted"
-        : "bg-warning";
-
-  return <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />;
-}
-
-function RefreshIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M11.5 7A4.5 4.5 0 105.5 3"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <path
-        d="M5.5 1v2h2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function EyeIcon({ open }: { open: boolean }) {
-  if (open) {
-    return (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <path
-          d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"
-          stroke="currentColor"
-          strokeWidth="1.2"
-        />
-        <circle cx="7" cy="7" r="1.5" stroke="currentColor" strokeWidth="1.2" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M1 7s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-      />
-      <circle cx="7" cy="7" r="1.5" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M2 2l10 10M5.5 5.8A2.5 2.5 0 007 9.5a2.5 2.5 0 002.5-2.5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M1 7s2-3 6-3c1 0 1.8.3 2.5.7M13 7s-2 3-6 3c-1 0-1.8-.3-2.5-.7"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function RunningIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle
-        cx="7"
-        cy="7"
-        r="4.5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        fill={active ? "currentColor" : "none"}
-        fillOpacity={active ? 0.25 : 0}
-      />
-      {active && (
-        <path
-          d="M5.5 7l1.2 1.2L8.5 6"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      )}
-    </svg>
   );
 }

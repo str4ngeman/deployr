@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Container,
+  RefreshCw,
+  ChevronRight,
+  Package,
+} from "lucide-react";
 import {
   getSettings,
   listContainers,
@@ -9,16 +16,32 @@ import {
   stopContainer,
   type ContainerInfo,
 } from "../lib/api";
+import { ContainerDetailPanel } from "./ContainerDetailPanel";
+import {
+  Alert,
+  Badge,
+  Button,
+  EmptyState,
+  ListSkeleton,
+  PageHeader,
+  SearchInput,
+  StatusBadge,
+  Toggle,
+  cn,
+} from "./ui";
 
 type ActionType = "restart" | "stop" | "start" | "pull" | "recreate";
 
 export function AppsPage() {
+  const navigate = useNavigate();
   const [containers, setContainers] = useState<ContainerInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningOnly, setRunningOnly] = useState(true);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<ContainerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [actionId, setActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
 
   const loadContainers = useCallback(async () => {
     setLoading(true);
@@ -46,6 +69,17 @@ export function AppsPage() {
     loadContainers();
   }, [loadContainers]);
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return containers;
+    const q = search.toLowerCase();
+    return containers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.image.toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q),
+    );
+  }, [containers, search]);
+
   const runAction = async (container: ContainerInfo, action: ActionType) => {
     setActionId(`${container.id}:${action}`);
     setError(null);
@@ -55,7 +89,7 @@ export function AppsPage() {
       switch (action) {
         case "restart":
           await restartContainer(container.id);
-          result = { message: `${container.name} restarted` };
+          result = { message: `${container.name} restarted successfully` };
           break;
         case "stop":
           await stopContainer(container.id);
@@ -82,173 +116,98 @@ export function AppsPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Apps Manager</h2>
-            <p className="mt-1 text-text-muted text-sm">
-              Manage Docker containers — restart, pull GHCR images, and more.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setRunningOnly((prev) => !prev)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
-                runningOnly
-                  ? "border-success/40 bg-success/15 text-success"
-                  : "border-border hover:bg-surface-overlay text-text-muted"
-              }`}
-            >
-              {runningOnly ? "Running only" : "All containers"}
-            </button>
-            <button
-              onClick={loadContainers}
-              disabled={loading}
-              className="px-3 py-1.5 text-xs font-medium rounded-md border border-border hover:bg-surface-overlay disabled:opacity-40"
-            >
-              Refresh
-            </button>
+    <div className="flex h-full">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-border shrink-0">
+          <PageHeader
+            title="Apps Manager"
+            description="Manage Docker containers and deployments"
+            icon={<Container size={20} />}
+            actions={
+              <>
+                <Toggle checked={runningOnly} onChange={setRunningOnly} label="Running only" />
+                <Button icon={<RefreshCw size={14} />} onClick={loadContainers} loading={loading}>
+                  Refresh
+                </Button>
+              </>
+            }
+          />
+          <div className="max-w-sm">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search containers..." />
           </div>
         </div>
 
-        {message && (
-          <div className="mt-4 px-4 py-2 text-xs text-success bg-success/10 border border-success/20 rounded-lg">
-            {message}
-          </div>
-        )}
-        {error && (
-          <div className="mt-4 px-4 py-2 text-xs text-danger bg-danger/10 border border-danger/20 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        <div className="mt-6 space-y-3">
-          {loading && <p className="text-sm text-text-muted">Loading containers...</p>}
-          {!loading && containers.length === 0 && (
-            <p className="text-sm text-text-muted">No containers found.</p>
+        <div className="flex-1 overflow-y-auto p-6">
+          {message && (
+            <Alert variant="success" onDismiss={() => setMessage(null)} className="mb-4">
+              {message}
+            </Alert>
           )}
-          {containers.map((container) => (
-            <ContainerCard
-              key={container.id}
-              container={container}
-              actionId={actionId}
-              onAction={runAction}
+          {error && (
+            <Alert variant="danger" onDismiss={() => setError(null)} className="mb-4">
+              {error}
+            </Alert>
+          )}
+
+          {loading ? (
+            <ListSkeleton count={4} />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={<Package size={24} />}
+              title={search ? "No matches" : "No containers"}
+              description={search ? "Try a different search term" : runningOnly ? "No running containers found" : "No containers on this host"}
+              action={!search && <Button onClick={loadContainers} icon={<RefreshCw size={14} />}>Refresh</Button>}
             />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ContainerCard({
-  container,
-  actionId,
-  onAction,
-}: {
-  container: ContainerInfo;
-  actionId: string | null;
-  onAction: (container: ContainerInfo, action: ActionType) => void;
-}) {
-  const isRunning = container.state === "running";
-  const busy = actionId?.startsWith(container.id) ?? false;
-
-  return (
-    <div className="rounded-xl border border-border bg-surface-raised p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <StatusDot state={container.state} />
-            <h3 className="text-sm font-semibold truncate">{container.name}</h3>
-            {container.isGhcr && (
-              <span className="text-[10px] font-medium uppercase tracking-wider text-accent bg-accent/15 px-1.5 py-0.5 rounded">
-                GHCR
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-text-muted font-mono truncate">{container.image}</p>
-          <p className="mt-1 text-[11px] text-text-muted">{container.status}</p>
-          {container.ports !== "—" && (
-            <p className="mt-0.5 text-[11px] text-text-muted">Ports: {container.ports}</p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2 justify-end shrink-0">
-          {isRunning ? (
-            <>
-              <ActionButton
-                label="Restart"
-                busy={busy && actionId === `${container.id}:restart`}
-                onClick={() => onAction(container, "restart")}
-              />
-              <ActionButton
-                label="Stop"
-                variant="danger"
-                busy={busy && actionId === `${container.id}:stop`}
-                onClick={() => onAction(container, "stop")}
-              />
-            </>
           ) : (
-            <ActionButton
-              label="Start"
-              busy={busy && actionId === `${container.id}:start`}
-              onClick={() => onAction(container, "start")}
-            />
-          )}
-          {container.isGhcr && (
-            <>
-              <ActionButton
-                label="Pull"
-                busy={busy && actionId === `${container.id}:pull`}
-                onClick={() => onAction(container, "pull")}
-              />
-              <ActionButton
-                label="Pull & Recreate"
-                busy={busy && actionId === `${container.id}:recreate`}
-                onClick={() => onAction(container, "recreate")}
-              />
-            </>
+            <div className="space-y-2">
+              {filtered.map((container) => (
+                <button
+                  key={container.id}
+                  onClick={() => setSelected(container)}
+                  className={cn(
+                    "w-full text-left rounded-xl border p-4 transition-all duration-150 group",
+                    selected?.id === container.id
+                      ? "border-accent/40 bg-accent-muted"
+                      : "border-border bg-surface-raised hover:border-border hover:bg-surface-overlay",
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-surface-overlay border border-border flex items-center justify-center text-text-muted group-hover:text-accent transition-colors shrink-0">
+                      <Container size={18} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold truncate">{container.name}</span>
+                        <StatusBadge state={container.state} />
+                        {container.isGhcr && <Badge variant="accent">GHCR</Badge>}
+                      </div>
+                      <p className="text-xs text-text-muted font-mono truncate mt-0.5">{container.image}</p>
+                      <p className="text-[11px] text-text-faint mt-0.5">{container.status}</p>
+                    </div>
+                    {container.ports !== "—" && (
+                      <div className="hidden sm:block text-right shrink-0">
+                        <p className="text-[10px] text-text-faint uppercase tracking-wider">Ports</p>
+                        <p className="text-xs font-mono text-text-muted mt-0.5">{container.ports}</p>
+                      </div>
+                    )}
+                    <ChevronRight size={16} className="text-text-faint group-hover:text-accent transition-colors shrink-0" />
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
+
+      {selected && (
+        <ContainerDetailPanel
+          container={selected}
+          onClose={() => setSelected(null)}
+          onAction={runAction}
+          actionId={actionId}
+          onViewLogs={(c) => navigate(`/logs?container=${c.id}`)}
+        />
+      )}
     </div>
   );
-}
-
-function ActionButton({
-  label,
-  onClick,
-  busy,
-  variant = "default",
-}: {
-  label: string;
-  onClick: () => void;
-  busy: boolean;
-  variant?: "default" | "danger";
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={busy}
-      className={`px-3 py-1 text-xs font-medium rounded-md border transition-colors disabled:opacity-40 ${
-        variant === "danger"
-          ? "border-danger/40 text-danger hover:bg-danger/10"
-          : "border-border hover:bg-surface-overlay"
-      }`}
-    >
-      {busy ? "..." : label}
-    </button>
-  );
-}
-
-function StatusDot({ state }: { state: string }) {
-  const color =
-    state === "running"
-      ? "bg-success"
-      : state === "exited"
-        ? "bg-text-muted"
-        : "bg-warning";
-
-  return <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />;
 }
