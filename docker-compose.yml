@@ -1,0 +1,11 @@
+services:
+  deployr:
+    build: .
+    ports:
+      - "4199:4199"
+    volumes:
+      - /opt:/opt:rw
+    environment:
+      - PORT=4199
+      - FILE_ROOT=/opt
+    restart: unless-stopped

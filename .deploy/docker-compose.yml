@@ -1,0 +1,13 @@
+services:
+  deployr:
+    image: ${DEPLOYR_IMAGE:-ghcr.io/str4ngeman/deployr:latest}
+    container_name: deployr
+    ports:
+      - "4199:4199"
+    volumes:
+      - /opt:/opt:rw
+    environment:
+      PORT: 4199
+      FILE_ROOT: /opt
+      NODE_ENV: production
+    restart: unless-stopped
