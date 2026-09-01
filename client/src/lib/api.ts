@@ -110,10 +110,19 @@ export interface ContainerInfo {
   state: string;
   status: string;
   ports: string;
+  isGhcr: boolean;
+  hidden?: boolean;
 }
 
-export function listContainers(): Promise<{ containers: ContainerInfo[] }> {
-  return apiFetch("/api/docker/containers");
+export function listContainers(options?: {
+  all?: boolean;
+  includeHidden?: boolean;
+}): Promise<{ containers: ContainerInfo[] }> {
+  const params = new URLSearchParams();
+  if (options?.all) params.set("all", "true");
+  if (options?.includeHidden) params.set("includeHidden", "true");
+  const query = params.toString();
+  return apiFetch(`/api/docker/containers${query ? `?${query}` : ""}`);
 }
 
 export function getContainerLogs(
@@ -158,4 +167,80 @@ export function streamContainerLogs(
 
 export function getDockerStatus(): Promise<{ enabled: boolean; connected: boolean }> {
   return apiFetch("/api/docker/status");
+}
+
+export function restartContainer(containerId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/docker/containers/${containerId}/restart`, { method: "POST" });
+}
+
+export function stopContainer(containerId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/docker/containers/${containerId}/stop`, { method: "POST" });
+}
+
+export function startContainer(containerId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/docker/containers/${containerId}/start`, { method: "POST" });
+}
+
+export function pullContainerImage(
+  containerId: string,
+): Promise<{ ok: boolean; message: string }> {
+  return apiFetch(`/api/docker/containers/${containerId}/pull`, { method: "POST" });
+}
+
+export function recreateContainer(
+  containerId: string,
+): Promise<{ ok: boolean; message: string }> {
+  return apiFetch(`/api/docker/containers/${containerId}/recreate`, { method: "POST" });
+}
+
+export interface SettingItem {
+  key: string;
+  label: string;
+  description: string;
+  type: "string" | "number" | "boolean" | "secret";
+  group: string;
+  defaultValue: string;
+  value: string;
+  masked?: boolean;
+}
+
+export interface HiddenContainer {
+  container_id: string;
+  container_name: string;
+  hidden_at: string;
+}
+
+export function getSettings(): Promise<{ settings: SettingItem[] }> {
+  return apiFetch("/api/settings");
+}
+
+export function updateSettings(
+  updates: Record<string, string>,
+): Promise<{ settings: SettingItem[] }> {
+  return apiFetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+}
+
+export function getHiddenContainers(): Promise<{ containers: HiddenContainer[] }> {
+  return apiFetch("/api/settings/hidden-containers");
+}
+
+export function hideContainer(
+  containerId: string,
+  containerName: string,
+): Promise<{ ok: boolean }> {
+  return apiFetch("/api/settings/hidden-containers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ containerId, containerName }),
+  });
+}
+
+export function unhideContainer(containerId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/settings/hidden-containers/${containerId}`, {
+    method: "DELETE",
+  });
 }

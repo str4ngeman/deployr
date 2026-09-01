@@ -4,12 +4,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 import filesRouter from "./routes/files.js";
 import dockerRouter from "./routes/docker.js";
+import settingsRouter from "./routes/settings.js";
+import { initDatabase } from "./lib/db.js";
 import { getFileRoot } from "./lib/paths.js";
 import { isDockerEnabled, checkDockerConnection } from "./lib/docker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || "4199", 10);
 const isDev = process.env.NODE_ENV !== "production";
+
+initDatabase();
 
 const app = express();
 
@@ -30,6 +34,7 @@ app.get("/api/health", async (_req, res) => {
 
 app.use("/api/files", filesRouter);
 app.use("/api/docker", dockerRouter);
+app.use("/api/settings", settingsRouter);
 
 if (!isDev) {
   const clientDir = path.join(__dirname, "../client");

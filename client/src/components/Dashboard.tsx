@@ -42,11 +42,11 @@ export function Dashboard() {
             available
           />
           <ToolCard
-            to="#"
+            to="/apps"
             title="App Manager"
             description="View and manage Docker containers deployed from GHCR."
             icon={<ContainerIcon />}
-            available={false}
+            available
           />
           <ToolCard
             to="/logs"
@@ -56,11 +56,11 @@ export function Dashboard() {
             available
           />
           <ToolCard
-            to="#"
-            title="Deploy"
-            description="Trigger deployments and manage release versions."
-            icon={<DeployIcon />}
-            available={false}
+            to="/settings"
+            title="Settings"
+            description="Configure logs, GHCR credentials, hidden containers, and more."
+            icon={<SettingsIcon />}
+            available
           />
         </div>
       </div>
@@ -144,16 +144,16 @@ function LogsIcon() {
   );
 }
 
-function DeployIcon() {
+function SettingsIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
       <path
-        d="M10 3L17 7v6l-7 4-7-4V7l7-4z"
+        d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"
         stroke="currentColor"
         strokeWidth="1.5"
-        strokeLinejoin="round"
+        strokeLinecap="round"
       />
-      <path d="M10 8v5M7.5 9.5h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }

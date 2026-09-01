@@ -1,0 +1,51 @@
+import { Router, type Request, type Response } from "express";
+import {
+  getAllSettings,
+  getHiddenContainers,
+  hideContainer,
+  unhideContainer,
+  updateSettings,
+} from "../lib/db.js";
+
+const router = Router();
+
+router.get("/", (_req: Request, res: Response) => {
+  res.json({ settings: getAllSettings() });
+});
+
+router.put("/", (req: Request, res: Response) => {
+  const updates = req.body as Record<string, string>;
+  if (!updates || typeof updates !== "object") {
+    res.status(400).json({ error: "Invalid settings payload" });
+    return;
+  }
+
+  const settings = updateSettings(updates);
+  res.json({ settings });
+});
+
+router.get("/hidden-containers", (_req: Request, res: Response) => {
+  res.json({ containers: getHiddenContainers() });
+});
+
+router.post("/hidden-containers", (req: Request, res: Response) => {
+  const { containerId, containerName } = req.body as {
+    containerId?: string;
+    containerName?: string;
+  };
+
+  if (!containerId || !containerName) {
+    res.status(400).json({ error: "containerId and containerName are required" });
+    return;
+  }
+
+  hideContainer(containerId, containerName);
+  res.json({ ok: true });
+});
+
+router.delete("/hidden-containers/:id", (req: Request, res: Response) => {
+  unhideContainer(String(req.params.id));
+  res.json({ ok: true });
+});
+
+export default router;

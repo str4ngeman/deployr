@@ -10,4 +10,13 @@ services:
       PORT: 4199
       FILE_ROOT: /opt
       NODE_ENV: production
+      DOCKER_ENABLED: "true"
+      DATA_DIR: /app/data
+    volumes:
+      - /opt:/opt:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - deployr-data:/app/data
     restart: unless-stopped
+
+volumes:
+  deployr-data:

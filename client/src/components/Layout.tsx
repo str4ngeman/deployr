@@ -1,15 +1,17 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 
 const navItems = [
   { to: "/editor", label: "File Editor", icon: FileIcon },
+  { to: "/apps", label: "Apps Manager", icon: AppsIcon },
   { to: "/logs", label: "Logs Viewer", icon: LogsIcon },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export function Layout() {
   return (
     <div className="flex h-screen">
       <aside className="w-56 shrink-0 border-r border-border bg-surface-raised flex flex-col">
-        <div className="px-4 py-5 border-b border-border">
+        <Link to="/" className="px-4 py-5 border-b border-border hover:bg-surface-overlay transition-colors">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
               <DeployIcon />
@@ -19,7 +21,7 @@ export function Layout() {
               <p className="text-[11px] text-text-muted">VPS Manager</p>
             </div>
           </div>
-        </div>
+        </Link>
 
         <nav className="flex-1 px-2 py-3 space-y-0.5">
           {navItems.map((item) => (
@@ -81,11 +83,35 @@ function FileIcon() {
   );
 }
 
+function AppsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+      <rect x="2" y="5" width="12" height="9" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5 5V3.5A1.5 1.5 0 016.5 2h3A1.5 1.5 0 0111 3.5V5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2 8.5h12" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
 function LogsIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
       <path
         d="M2 4h12M2 8h8M2 12h10"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"
         stroke="currentColor"
         strokeWidth="1.2"
         strokeLinecap="round"
