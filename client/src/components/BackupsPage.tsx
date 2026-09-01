@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Archive, Plus, Trash2, RefreshCw } from "lucide-react";
+import { Archive, Plus, Trash2, RefreshCw, Download, RotateCcw } from "lucide-react";
 import {
   listBackups,
   listBackupPaths,
   createBackup,
   deleteBackup,
+  downloadBackup,
+  restoreBackup,
   formatBytes,
   type BackupEntry,
 } from "../lib/api";
@@ -16,6 +18,7 @@ export function BackupsPage() {
   const [selectedPath, setSelectedPath] = useState("");
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [actionId, setActionId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "danger" } | null>(null);
 
   const load = async () => {
@@ -60,12 +63,38 @@ export function BackupsPage() {
     }
   };
 
+  const handleDownload = async (backup: BackupEntry) => {
+    setActionId(backup.id);
+    try {
+      await downloadBackup(backup.id, backup.filename);
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Download failed", type: "danger" });
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleRestore = async (backup: BackupEntry) => {
+    if (!confirm(`Restore "${backup.source_path}" from this backup? Current files will be overwritten.`)) {
+      return;
+    }
+    setActionId(backup.id);
+    try {
+      await restoreBackup(backup.id);
+      setMessage({ text: `Restored ${backup.source_path}`, type: "success" });
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Restore failed", type: "danger" });
+    } finally {
+      setActionId(null);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="p-8 max-w-5xl mx-auto animate-fade-in">
         <PageHeader
           title="Backups"
-          description="Create and manage tar.gz backups of directories"
+          description="Create tar.gz snapshots of directories — download or restore anytime"
           icon={<Archive size={20} />}
           actions={
             <Button variant="ghost" size="sm" onClick={load} icon={<RefreshCw size={14} />}>
@@ -81,7 +110,10 @@ export function BackupsPage() {
         )}
 
         <Card className="p-4 mb-6">
-          <h2 className="text-sm font-semibold mb-3">Create backup</h2>
+          <h2 className="text-sm font-semibold mb-1">Create backup</h2>
+          <p className="text-xs text-text-muted mb-3">
+            Archives a directory under your file root as a compressed .tar.gz file stored on the server.
+          </p>
           <div className="flex gap-2">
             <select
               value={selectedPath}
@@ -123,14 +155,34 @@ export function BackupsPage() {
                     {formatBytes(b.size)} · {new Date(b.created_at).toLocaleString()}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() => handleDelete(b.id)}
-                  icon={<Trash2 size={13} />}
-                >
-                  Delete
-                </Button>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={actionId === b.id}
+                    onClick={() => handleDownload(b)}
+                    icon={<Download size={13} />}
+                  >
+                    Download
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={actionId === b.id}
+                    onClick={() => handleRestore(b)}
+                    icon={<RotateCcw size={13} />}
+                  >
+                    Restore
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => handleDelete(b.id)}
+                    icon={<Trash2 size={13} />}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>

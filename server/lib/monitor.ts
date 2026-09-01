@@ -158,17 +158,21 @@ export function getHealthStatuses(): HealthStatus[] {
 }
 
 export async function getSystemInfo(): Promise<{
-  diskTotal?: string;
-  diskUsed?: string;
-  diskAvail?: string;
+  total: number;
+  used: number;
+  available: number;
 }> {
   try {
-    const { stdout } = await execFileAsync("df", ["-h", getFileRoot()], { timeout: 5000 });
+    const { stdout } = await execFileAsync("df", ["-B1", getFileRoot()], { timeout: 5000 });
     const line = stdout.trim().split("\n")[1];
-    if (!line) return {};
+    if (!line) return { total: 0, used: 0, available: 0 };
     const parts = line.split(/\s+/);
-    return { diskTotal: parts[1], diskUsed: parts[2], diskAvail: parts[3] };
+    return {
+      total: parseInt(parts[1], 10) || 0,
+      used: parseInt(parts[2], 10) || 0,
+      available: parseInt(parts[3], 10) || 0,
+    };
   } catch {
-    return {};
+    return { total: 0, used: 0, available: 0 };
   }
 }

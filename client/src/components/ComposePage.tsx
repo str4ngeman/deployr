@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Layers, Play, Square, RotateCcw, Download, RefreshCw } from "lucide-react";
+import { Layers, Play, Square, RotateCcw, Download, RefreshCw, Rocket, AlertTriangle } from "lucide-react";
 import {
   listComposeProjects,
   composePull,
   composeUp,
   composeDown,
   composeRestart,
+  composeDeploy,
   type ComposeProject,
 } from "../lib/api";
 import { Button, Card, PageHeader, EmptyState, Alert, Badge, ListSkeleton } from "./ui";
@@ -35,12 +36,15 @@ export function ComposePage() {
     try {
       const result = await fn(path) as { message?: string };
       setMessage({ text: result.message || `${action} complete`, type: "success" });
+      load();
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : "Action failed", type: "danger" });
     } finally {
       setActionLoading(null);
     }
   };
+
+  const pendingCount = projects.filter((p) => p.pendingDeploy).length;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -62,6 +66,12 @@ export function ComposePage() {
           </Alert>
         )}
 
+        {pendingCount > 0 && (
+          <Alert variant="warning" className="mb-4">
+            {pendingCount} project{pendingCount > 1 ? "s have" : " has"} pending deployment (git changes detected on remote or uncommitted local changes).
+          </Alert>
+        )}
+
         {loading ? (
           <ListSkeleton count={4} />
         ) : projects.length === 0 ? (
@@ -76,8 +86,23 @@ export function ComposePage() {
               <Card key={project.path} className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold">{project.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{project.name}</h3>
+                      {project.pendingDeploy && (
+                        <Badge variant="warning">
+                          <AlertTriangle size={10} />
+                          Deploy pending
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-xs text-text-faint font-mono mt-0.5">{project.composeFile}</p>
+                    {project.git && (
+                      <p className="text-[10px] text-text-muted font-mono mt-1">
+                        {project.git.branch} @ {(project.git.commit || "").slice(0, 7)}
+                        {project.git.behindRemote ? ` · ${project.git.behindRemote} commits behind` : ""}
+                        {project.git.dirty ? " · uncommitted changes" : ""}
+                      </p>
+                    )}
                     {project.services.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {project.services.map((s) => (
@@ -87,6 +112,15 @@ export function ComposePage() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={actionLoading === `${project.path}:deploy`}
+                      onClick={() => run(project.path, "deploy", composeDeploy)}
+                      icon={<Rocket size={13} />}
+                    >
+                      Deploy
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   HardDrive,
@@ -27,11 +27,17 @@ export function MonitorPage() {
   const [system, setSystem] = useState<{ total: number; used: number; available: number } | null>(null);
   const [health, setHealth] = useState<HealthCheck[]>([]);
   const [repos, setRepos] = useState<GitRepo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [healthLoading, setHealthLoading] = useState(false);
+  const hasLoaded = useRef(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      if (!hasLoaded.current) setInitialLoading(true);
+      else setRefreshing(true);
+    }
+
     try {
       const [s, d, h, g] = await Promise.all([
         getContainerStats(),
@@ -44,18 +50,20 @@ export function MonitorPage() {
       setSystem(d.system);
       setHealth(h.checks);
       setRepos(g.repos);
+      hasLoaded.current = true;
     } catch {
       // partial failure ok
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 15000);
+    const interval = setInterval(() => load(true), 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [load]);
 
   const runHealth = async () => {
     setHealthLoading(true);
@@ -72,6 +80,9 @@ export function MonitorPage() {
     ? Math.round(stats.reduce((a, s) => a + s.cpuPercent, 0) / stats.length * 10) / 10
     : 0;
 
+  const diskPercent =
+    system && system.total > 0 ? Math.round((system.used / system.total) * 100) : null;
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="p-8 max-w-5xl mx-auto animate-fade-in">
@@ -80,26 +91,36 @@ export function MonitorPage() {
           description="Resource usage, health checks, and git status"
           icon={<Activity size={20} />}
           actions={
-            <Button variant="ghost" size="sm" onClick={load} icon={<RefreshCw size={14} />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => load()}
+              loading={refreshing}
+              icon={<RefreshCw size={14} className={refreshing ? "animate-spin-slow" : ""} />}
+            >
               Refresh
             </Button>
           }
         />
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard label="Avg CPU" value={`${avgCpu}%`} loading={loading} icon={<Activity size={16} />} />
-          <StatCard label="Containers" value={stats.length} loading={loading} icon={<Activity size={16} />} />
+          <StatCard label="Avg CPU" value={`${avgCpu}%`} loading={initialLoading} icon={<Activity size={16} />} />
+          <StatCard label="Containers" value={stats.length} loading={initialLoading} icon={<Activity size={16} />} />
           <StatCard
             label="Disk used"
-            value={system ? formatBytes(system.used) : "—"}
-            loading={loading}
+            value={system && system.total > 0 ? formatBytes(system.used) : "—"}
+            loading={initialLoading}
             icon={<HardDrive size={16} />}
-            trend={system ? `${Math.round((system.used / system.total) * 100)}% of ${formatBytes(system.total)}` : undefined}
+            trend={
+              diskPercent !== null
+                ? `${diskPercent}% of ${formatBytes(system!.total)}`
+                : undefined
+            }
           />
           <StatCard
             label="Health"
             value={unhealthy > 0 ? `${unhealthy} issues` : "All OK"}
-            loading={loading}
+            loading={initialLoading}
             icon={<HeartPulse size={16} />}
           />
         </div>
@@ -112,7 +133,7 @@ export function MonitorPage() {
                 Container stats
               </h2>
             </div>
-            {loading ? (
+            {initialLoading ? (
               <ListSkeleton count={3} />
             ) : stats.length === 0 ? (
               <p className="text-xs text-text-muted py-4 text-center">No running containers</p>
@@ -162,7 +183,7 @@ export function MonitorPage() {
               <HardDrive size={16} className="text-accent" />
               Largest directories
             </h2>
-            {loading ? (
+            {initialLoading ? (
               <ListSkeleton count={3} />
             ) : disk.length === 0 ? (
               <p className="text-xs text-text-muted py-4 text-center">No data</p>
@@ -189,17 +210,23 @@ export function MonitorPage() {
               <div className="space-y-2">
                 {repos.map((r) => (
                   <div key={r.path} className="py-2 border-b border-border-subtle last:border-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-mono truncate">{r.path}</span>
-                      {r.dirty && (
-                        <Badge variant="warning">
-                          <AlertTriangle size={10} />
-                          dirty
-                        </Badge>
-                      )}
+                      <div className="flex gap-1 shrink-0">
+                        {r.pendingDeploy && (
+                          <Badge variant="warning">Deploy pending</Badge>
+                        )}
+                        {r.dirty && (
+                          <Badge variant="warning">
+                            <AlertTriangle size={10} />
+                            dirty
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     <p className={cn("text-[10px] text-text-faint mt-0.5 font-mono")}>
                       {r.branch || "—"} @ {(r.commit || "—").slice(0, 7)}
+                      {r.behindRemote ? ` · ${r.behindRemote} behind` : ""}
                     </p>
                   </div>
                 ))}

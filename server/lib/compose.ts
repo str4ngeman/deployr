@@ -117,3 +117,9 @@ export async function composeRestart(projectPath: string): Promise<string> {
   const { stdout } = await runCompose(projectPath, ["restart"]);
   return stdout || "Restarted";
 }
+
+export async function composeDeploy(projectPath: string): Promise<string> {
+  await runCompose(projectPath, ["pull"]);
+  const { stdout } = await runCompose(projectPath, ["up", "-d", "--force-recreate"]);
+  return stdout || "Deployed";
+}

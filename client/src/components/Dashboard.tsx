@@ -16,6 +16,8 @@ import {
   Clock,
   KeyRound,
   HeartPulse,
+  Rocket,
+  AlertTriangle,
 } from "lucide-react";
 import {
   getHealth,
@@ -23,10 +25,13 @@ import {
   getActivityHistory,
   getHealthChecks,
   getContainerStats,
+  listComposeProjects,
+  composeDeploy,
   formatBytes,
   type ActivityEntry,
+  type ComposeProject,
 } from "../lib/api";
-import { Card, PageHeader, StatCard, Badge, cn } from "./ui";
+import { Card, PageHeader, StatCard, Badge, Button, cn } from "./ui";
 
 export function Dashboard() {
   const [health, setHealth] = useState<{
@@ -36,32 +41,50 @@ export function Dashboard() {
   } | null>(null);
   const [containerStats, setContainerStats] = useState({ total: 0, running: 0 });
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [pendingProjects, setPendingProjects] = useState<ComposeProject[]>([]);
   const [unhealthy, setUnhealthy] = useState(0);
   const [memUsage, setMemUsage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deploying, setDeploying] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     Promise.all([
       getHealth(),
       listContainers({ all: true }).catch(() => ({ containers: [] })),
       getActivityHistory(10).catch(() => ({ activity: [] })),
       getHealthChecks().catch(() => ({ checks: [] })),
       getContainerStats().catch(() => ({ stats: [] })),
+      listComposeProjects().catch(() => ({ projects: [] })),
     ])
-      .then(([h, c, a, healthData, stats]) => {
+      .then(([h, c, a, healthData, stats, compose]) => {
         setHealth(h);
         setContainerStats({
           total: c.containers.length,
           running: c.containers.filter((x) => x.state === "running").length,
         });
         setActivity(a.activity);
+        setPendingProjects(compose.projects.filter((p) => p.pendingDeploy));
         setUnhealthy(healthData.checks.filter((x) => !x.healthy).length);
         const totalMem = stats.stats.reduce((sum, s) => sum + s.memoryUsage, 0);
         setMemUsage(stats.stats.length > 0 ? formatBytes(totalMem) : "—");
       })
       .catch(() => setHealth(null))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const handleDeploy = async (project: ComposeProject) => {
+    setDeploying(project.path);
+    try {
+      await composeDeploy(project.path);
+      load();
+    } finally {
+      setDeploying(null);
+    }
+  };
 
   const tools = [
     { to: "/editor", title: "File Editor", description: "Browse, create, and edit files", icon: FileCode2, color: "text-blue-400", bg: "bg-blue-400/10 border-blue-400/20" },
@@ -98,26 +121,6 @@ export function Dashboard() {
           <StatCard label="File root" value={health ? health.fileRoot.split("/").pop() || "/" : "—"} loading={loading} icon={<HardDrive size={16} />} trend={health?.fileRoot} />
         </div>
 
-        {activity.length > 0 && (
-          <Card className="p-4 mb-8">
-            <h2 className="text-sm font-semibold mb-3">Recent activity</h2>
-            <div className="space-y-2">
-              {activity.map((a) => (
-                <div key={a.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-0">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium truncate">{a.action} · {a.target}</p>
-                    <p className="text-[10px] text-text-faint truncate">{a.message}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
-                    <span className="text-[10px] text-text-faint">{new Date(a.created_at).toLocaleTimeString()}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
         {health && (
           <Card className="p-4 mb-8 glass">
             <div className="flex flex-wrap gap-6 text-xs">
@@ -138,7 +141,7 @@ export function Dashboard() {
         )}
 
         <h2 className="text-sm font-semibold text-text-muted mb-4">Quick access</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mb-8">
           {tools.map((tool) => (
             <Link key={tool.to} to={tool.to}>
               <Card hover className="p-5 group h-full">
@@ -158,6 +161,57 @@ export function Dashboard() {
             </Link>
           ))}
         </div>
+
+        {pendingProjects.length > 0 && (
+          <Card className="p-4 mb-8">
+            <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-warning" />
+              Pending deployments
+            </h2>
+            <div className="space-y-2">
+              {pendingProjects.map((project) => (
+                <div key={project.path} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium">{project.name}</p>
+                    <p className="text-[10px] text-text-faint font-mono truncate">
+                      {project.git?.behindRemote ? `${project.git.behindRemote} commits behind remote` : ""}
+                      {project.git?.dirty ? `${project.git?.behindRemote ? " · " : ""}uncommitted changes` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={deploying === project.path}
+                    onClick={() => handleDeploy(project)}
+                    icon={<Rocket size={13} />}
+                  >
+                    Deploy
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {activity.length > 0 && (
+          <Card className="p-4">
+            <h2 className="text-sm font-semibold mb-3">Recent activity</h2>
+            <div className="space-y-2">
+              {activity.map((a) => (
+                <div key={a.id} className="flex items-center justify-between py-2 border-b border-border-subtle last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{a.action} · {a.target}</p>
+                    <p className="text-[10px] text-text-faint truncate">{a.message}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant={statusVariant(a.status)}>{a.status}</Badge>
+                    <span className="text-[10px] text-text-faint">{new Date(a.created_at).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );

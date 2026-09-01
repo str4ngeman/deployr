@@ -12,6 +12,9 @@ export interface GitInfo {
   commit?: string;
   remote?: string;
   dirty?: boolean;
+  behindRemote?: number;
+  aheadRemote?: number;
+  pendingDeploy?: boolean;
 }
 
 export async function getGitInfo(dirPath: string): Promise<GitInfo> {
@@ -38,13 +41,33 @@ export async function getGitInfo(dirPath: string): Promise<GitInfo> {
       run(["status", "--porcelain"]),
     ]);
 
+    const dirty = status.length > 0;
+    let behindRemote = 0;
+    let aheadRemote = 0;
+
+    try {
+      await run(["fetch", "--quiet", "origin"]);
+      const upstream = await run(["rev-parse", "--abbrev-ref", "@{upstream}"]).catch(() => "");
+      if (upstream) {
+        behindRemote =
+          parseInt(await run(["rev-list", "--count", `HEAD..${upstream}`]), 10) || 0;
+        aheadRemote =
+          parseInt(await run(["rev-list", "--count", `${upstream}..HEAD`]), 10) || 0;
+      }
+    } catch {
+      // fetch may fail offline or without remote
+    }
+
     return {
       path: dirPath,
       isRepo: true,
       branch,
       commit,
       remote: remote || undefined,
-      dirty: status.length > 0,
+      dirty,
+      behindRemote,
+      aheadRemote,
+      pendingDeploy: dirty || behindRemote > 0,
     };
   } catch {
     return { path: dirPath, isRepo: true };

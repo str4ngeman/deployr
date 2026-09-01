@@ -310,6 +310,8 @@ export interface ComposeProject {
   path: string;
   composeFile: string;
   services: string[];
+  pendingDeploy?: boolean;
+  git?: GitRepo | null;
 }
 
 export function listComposeProjects(): Promise<{ projects: ComposeProject[] }> {
@@ -326,6 +328,7 @@ export const composePull = (p: string) => composeAction(p, "pull");
 export const composeUp = (p: string) => composeAction(p, "up");
 export const composeDown = (p: string) => composeAction(p, "down");
 export const composeRestart = (p: string) => composeAction(p, "restart");
+export const composeDeploy = (p: string) => composeAction(p, "deploy");
 
 // Monitor
 export interface ContainerStat {
@@ -357,6 +360,9 @@ export interface GitRepo {
   commit?: string;
   dirty?: boolean;
   remote?: string;
+  behindRemote?: number;
+  aheadRemote?: number;
+  pendingDeploy?: boolean;
 }
 
 export function getContainerStats(): Promise<{ stats: ContainerStat[] }> {
@@ -411,6 +417,25 @@ export function createBackup(path: string): Promise<{ backup: BackupEntry }> {
 
 export function deleteBackup(id: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/backups/${id}`, { method: "DELETE" });
+}
+
+export async function downloadBackup(id: number, filename: string): Promise<void> {
+  const res = await fetch(`/api/backups/${id}/download`, { credentials: "include" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Download failed");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function restoreBackup(id: number): Promise<{ ok: boolean; backup: BackupEntry }> {
+  return apiFetch(`/api/backups/${id}/restore`, { method: "POST" });
 }
 
 // Scheduler

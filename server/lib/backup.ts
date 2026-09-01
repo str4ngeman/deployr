@@ -67,6 +67,28 @@ export async function deleteBackup(id: number): Promise<void> {
   getDatabase().prepare("DELETE FROM backups WHERE id = ?").run(id);
 }
 
+export function getBackupById(id: number): BackupEntry | undefined {
+  return getDatabase()
+    .prepare(
+      "SELECT id, name, source_path, filename, size, created_at FROM backups WHERE id = ?",
+    )
+    .get(id) as BackupEntry | undefined;
+}
+
+export async function restoreBackup(id: number): Promise<BackupEntry> {
+  const backup = getBackupById(id);
+  if (!backup) throw new Error("Backup not found");
+
+  const resolved = resolveSafePath(backup.source_path);
+  if (!resolved) throw new Error("Invalid restore path");
+
+  const archivePath = getBackupFilePath(backup.filename);
+  const parent = path.dirname(resolved);
+
+  await execFileAsync("tar", ["-xzf", archivePath, "-C", parent], { timeout: 300000 });
+  return backup;
+}
+
 export function getBackupFilePath(filename: string): string {
   return path.join(getBackupDir(), filename);
 }
