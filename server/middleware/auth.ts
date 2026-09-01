@@ -1,21 +1,29 @@
 import type { Request, Response, NextFunction } from "express";
 import { isAuthEnabled, verifySession } from "../lib/auth.js";
+import { SESSION_COOKIE_NAME } from "../lib/session-cookie.js";
 
-const PUBLIC_PATHS = ["/api/auth/login", "/api/auth/status", "/api/health"];
+const PUBLIC_PREFIXES = ["/api/health", "/api/auth"];
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+  // Never block the SPA or static assets — only protect API routes
+  if (!req.path.startsWith("/api")) {
+    next();
+    return;
+  }
+
   if (!isAuthEnabled()) {
     next();
     return;
   }
 
-  if (PUBLIC_PATHS.some((p) => req.path === p || req.path.startsWith(p))) {
+  const path = req.path;
+  if (PUBLIC_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
     next();
     return;
   }
 
   const header = req.headers.authorization;
-  const cookie = (req as Request & { cookies?: Record<string, string> }).cookies?.deployr_token;
+  const cookie = (req as Request & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE_NAME];
   const token = header?.replace("Bearer ", "") || cookie;
 
   if (!verifySession(token)) {

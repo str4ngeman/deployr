@@ -277,6 +277,13 @@ export function getAuthStatus(): Promise<{
   return apiFetch("/api/auth/status");
 }
 
+export function getAuthSession(): Promise<{
+  authenticated: boolean;
+  username: string;
+}> {
+  return apiFetch("/api/auth/session", { credentials: "include" });
+}
+
 export function login(username: string, password: string): Promise<{ ok: boolean }> {
   return apiFetch("/api/auth/login", {
     method: "POST",

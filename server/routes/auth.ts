@@ -5,9 +5,33 @@ import {
   hashPassword,
   isAuthEnabled,
   login,
+  verifySession,
 } from "../lib/auth.js";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_OPTIONS,
+} from "../lib/session-cookie.js";
 
 const router = Router();
+
+function readToken(req: Request): string | undefined {
+  return (
+    req.headers.authorization?.replace("Bearer ", "") ||
+    (req as Request & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE_NAME]
+  );
+}
+
+function setSessionCookie(res: Response, token: string): void {
+  res.cookie(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
+}
+
+function clearSessionCookie(res: Response): void {
+  res.clearCookie(SESSION_COOKIE_NAME, {
+    httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
+    sameSite: SESSION_COOKIE_OPTIONS.sameSite,
+    path: SESSION_COOKIE_OPTIONS.path,
+  });
+}
 
 router.get("/status", (_req: Request, res: Response) => {
   const hasPassword = !!getSetting("auth.password");
@@ -18,10 +42,23 @@ router.get("/status", (_req: Request, res: Response) => {
   });
 });
 
+router.get("/session", (req: Request, res: Response) => {
+  const token = readToken(req);
+  res.json({
+    authenticated: !isAuthEnabled() || verifySession(token),
+    username: getSetting("auth.username") || "admin",
+  });
+});
+
 router.post("/login", (req: Request, res: Response) => {
   const { username, password } = req.body as { username?: string; password?: string };
   if (!username || !password) {
     res.status(400).json({ error: "Username and password required" });
+    return;
+  }
+
+  if (!isAuthEnabled()) {
+    res.status(400).json({ error: "Authentication is not enabled" });
     return;
   }
 
@@ -31,20 +68,14 @@ router.post("/login", (req: Request, res: Response) => {
     return;
   }
 
-  res.cookie("deployr_token", token, {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-  res.json({ ok: true, token });
+  setSessionCookie(res, token);
+  res.json({ ok: true });
 });
 
 router.post("/logout", (req: Request, res: Response) => {
-  const token =
-    req.headers.authorization?.replace("Bearer ", "") ||
-    (req as Request & { cookies?: Record<string, string> }).cookies?.deployr_token;
+  const token = readToken(req);
   if (token) deleteSession(token);
-  res.clearCookie("deployr_token");
+  clearSessionCookie(res);
   res.json({ ok: true });
 });
 
@@ -58,14 +89,8 @@ router.post("/setup", (req: Request, res: Response) => {
   setSetting("auth.password", hashPassword(password));
   setSetting("auth.enabled", "true");
   const token = login(username || "admin", password);
-  if (token) {
-    res.cookie("deployr_token", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-  }
-  res.json({ ok: true, token });
+  if (token) setSessionCookie(res, token);
+  res.json({ ok: true });
 });
 
 export default router;

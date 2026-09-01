@@ -45,6 +45,12 @@ app.get("/api/health", async (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+
+if (!isDev) {
+  const clientDir = path.join(__dirname, "../client");
+  app.use(express.static(clientDir));
+}
+
 app.use(authMiddleware);
 
 app.use("/api/files", filesRouter);
@@ -59,7 +65,6 @@ app.use("/api/env", envRouter);
 
 if (!isDev) {
   const clientDir = path.join(__dirname, "../client");
-  app.use(express.static(clientDir));
   app.get("*", (_req, res) => {
     res.sendFile(path.join(clientDir, "index.html"));
   });

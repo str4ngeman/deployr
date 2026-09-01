@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Hexagon, Lock } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Button, Card, Alert } from "./ui";
 
 export function LoginPage() {
   const { needsSetup, username: defaultUser, login, setup } = useAuth();
-  const [username, setUsername] = useState(defaultUser);
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (defaultUser) setUsername(defaultUser);
+  }, [defaultUser]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
