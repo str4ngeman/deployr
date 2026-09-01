@@ -11,7 +11,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN apk add --no-cache python3 make g++ \
+RUN apk add --no-cache python3 make g++ tar git \
   && npm ci --omit=dev \
   && apk del python3 make g++
 COPY --from=builder /app/dist ./dist

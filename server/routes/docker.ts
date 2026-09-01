@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import {
   getHiddenContainerIds,
 } from "../lib/db.js";
+import { logActivity, addNotification } from "../lib/activity.js";
 import {
   checkDockerConnection,
   followContainerLogs,
@@ -58,8 +59,10 @@ router.get("/containers/:id", async (req: Request, res: Response) => {
 });
 
 router.post("/containers/:id/restart", async (req: Request, res: Response) => {
+  const id = String(req.params.id);
   try {
-    await restartContainer(String(req.params.id));
+    await restartContainer(id);
+    logActivity("action", "restart", id, "success", "Container restarted");
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to restart" });
@@ -85,9 +88,12 @@ router.post("/containers/:id/start", async (req: Request, res: Response) => {
 });
 
 router.post("/containers/:id/pull", async (req: Request, res: Response) => {
+  const id = String(req.params.id);
   try {
-    const details = await inspectContainer(String(req.params.id));
+    const details = await inspectContainer(id);
     await pullImage(details.image);
+    logActivity("deploy", "pull", details.name, "success", details.image);
+    addNotification("Image pulled", details.name, "success");
     res.json({ ok: true, message: `Pulled ${details.image}` });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to pull image" });
@@ -95,8 +101,11 @@ router.post("/containers/:id/pull", async (req: Request, res: Response) => {
 });
 
 router.post("/containers/:id/recreate", async (req: Request, res: Response) => {
+  const id = String(req.params.id);
   try {
-    await pullAndRecreateContainer(String(req.params.id));
+    await pullAndRecreateContainer(id);
+    logActivity("deploy", "recreate", id, "success", "Container recreated");
+    addNotification("Container recreated", id.slice(0, 12), "success");
     res.json({ ok: true, message: "Container recreated with latest image" });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to recreate" });

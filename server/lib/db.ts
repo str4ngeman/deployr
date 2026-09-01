@@ -29,6 +29,58 @@ export function initDatabase(): Database.Database {
       container_name TEXT NOT NULL,
       hidden_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      expires_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL,
+      status TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'info',
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      cron TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS health_checks (
+      container_id TEXT PRIMARY KEY,
+      container_name TEXT NOT NULL,
+      state TEXT NOT NULL,
+      healthy INTEGER NOT NULL,
+      checked_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS backups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      source_path TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   for (const setting of SETTING_DEFINITIONS) {
