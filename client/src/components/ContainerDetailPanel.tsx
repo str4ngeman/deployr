@@ -68,6 +68,7 @@ export function ContainerDetailPanel({
   const busy = actionId?.startsWith(container.id) ?? false;
   const currentAction = actionId?.split(":")[1];
   const isRunning = container.state === "running";
+  const isDeployr = container.name === "deployr";
 
   const copyId = () => {
     navigator.clipboard.writeText(container.id);
@@ -102,16 +103,23 @@ export function ContainerDetailPanel({
               {isRunning ? (
                 <>
                   <Button size="sm" icon={<RotateCcw size={13} />} loading={busy && currentAction === "restart"} onClick={() => onAction(container, "restart")}>Restart</Button>
-                  <Button size="sm" variant="danger" icon={<Square size={13} />} loading={busy && currentAction === "stop"} onClick={() => onAction(container, "stop")}>Stop</Button>
+                  {!isDeployr && (
+                    <Button size="sm" variant="danger" icon={<Square size={13} />} loading={busy && currentAction === "stop"} onClick={() => onAction(container, "stop")}>Stop</Button>
+                  )}
                 </>
               ) : (
                 <Button size="sm" variant="success" icon={<Play size={13} />} loading={busy && currentAction === "start"} onClick={() => onAction(container, "start")}>Start</Button>
               )}
-              {container.isGhcr && (
+              {container.isGhcr && !isDeployr && (
                 <>
                   <Button size="sm" icon={<Download size={13} />} loading={busy && currentAction === "pull"} onClick={() => onAction(container, "pull")}>Pull</Button>
                   <Button size="sm" icon={<RefreshCw size={13} />} loading={busy && currentAction === "recreate"} onClick={() => onAction(container, "recreate")}>Recreate</Button>
                 </>
+              )}
+              {isDeployr && (
+                <p className="w-full text-[11px] text-text-muted mt-1">
+                  Update Deployr via SSH: <code className="text-accent">cd /opt/deployr && docker compose pull && docker compose up -d</code>
+                </p>
               )}
               {onViewLogs && (
                 <Button size="sm" variant="ghost" icon={<ExternalLink size={13} />} onClick={() => onViewLogs(container)}>Logs</Button>

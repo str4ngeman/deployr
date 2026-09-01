@@ -7,15 +7,26 @@ import {
   checkDockerConnection,
   followContainerLogs,
   getContainerLogs,
+  inspectContainer,
+  isDeployrContainer,
   isDockerEnabled,
   listContainers,
-  inspectContainer,
   pullAndRecreateContainer,
   pullImage,
   restartContainer,
   startContainer,
   stopContainer,
 } from "../lib/docker.js";
+
+function rejectDeployrSelfAction(
+  res: Response,
+  action: "stop" | "pull" | "recreate",
+): boolean {
+  res.status(400).json({
+    error: `Cannot ${action} the Deployr container from the UI — it would kill this app. SSH to the server and run: cd /opt/deployr && docker compose pull && docker compose up -d`,
+  });
+  return true;
+}
 
 const router = Router();
 
@@ -71,7 +82,12 @@ router.post("/containers/:id/restart", async (req: Request, res: Response) => {
 
 router.post("/containers/:id/stop", async (req: Request, res: Response) => {
   try {
-    await stopContainer(String(req.params.id));
+    const details = await inspectContainer(String(req.params.id));
+    if (isDeployrContainer(details.name)) {
+      rejectDeployrSelfAction(res, "stop");
+      return;
+    }
+    await stopContainer(details.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to stop" });
@@ -91,6 +107,10 @@ router.post("/containers/:id/pull", async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
     const details = await inspectContainer(id);
+    if (isDeployrContainer(details.name)) {
+      rejectDeployrSelfAction(res, "pull");
+      return;
+    }
     await pullImage(details.image);
     logActivity("deploy", "pull", details.name, "success", details.image);
     addNotification("Image pulled", details.name, "success");
@@ -103,6 +123,11 @@ router.post("/containers/:id/pull", async (req: Request, res: Response) => {
 router.post("/containers/:id/recreate", async (req: Request, res: Response) => {
   const id = String(req.params.id);
   try {
+    const details = await inspectContainer(id);
+    if (isDeployrContainer(details.name)) {
+      rejectDeployrSelfAction(res, "recreate");
+      return;
+    }
     await pullAndRecreateContainer(id);
     logActivity("deploy", "recreate", id, "success", "Container recreated");
     addNotification("Container recreated", id.slice(0, 12), "success");

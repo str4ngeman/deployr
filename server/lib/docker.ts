@@ -17,6 +17,12 @@ export function isDockerEnabled(): boolean {
   return DOCKER_ENABLED;
 }
 
+const DEPLOYR_CONTAINER_NAME = process.env.DEPLOYR_CONTAINER_NAME || "deployr";
+
+export function isDeployrContainer(name: string): boolean {
+  return name.replace(/^\//, "") === DEPLOYR_CONTAINER_NAME;
+}
+
 export interface ContainerInfo {
   id: string;
   name: string;
@@ -267,6 +273,9 @@ function buildRecreateOptions(inspect: Docker.ContainerInspectInfo) {
       LogConfig: inspect.HostConfig.LogConfig,
       Privileged: inspect.HostConfig.Privileged,
       Dns: inspect.HostConfig.Dns,
+      Memory: inspect.HostConfig.Memory || undefined,
+      MemorySwap: inspect.HostConfig.MemorySwap || undefined,
+      NanoCpus: inspect.HostConfig.NanoCpus || undefined,
     },
   };
 }
