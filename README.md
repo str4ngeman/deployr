@@ -28,6 +28,17 @@ PORT=4199
 
 ## Production
 
+### Local Docker (with your projects + container logs)
+
+```bash
+cp .env.example .env
+# set FILE_ROOT=/home/frank/projects and DOCKER_ENABLED=true
+
+npm run docker:local
+```
+
+This mounts your `FILE_ROOT` and `/var/run/docker.sock` so you can browse files and view container logs at http://localhost:4199.
+
 ### GHCR (VPS)
 
 Push to `main`/`master` publishes `ghcr.io/<owner>/deployr:latest` via GitHub Actions.

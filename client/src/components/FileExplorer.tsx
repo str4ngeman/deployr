@@ -1,18 +1,51 @@
 import { useCallback, useEffect, useState } from "react";
-import { listFiles, type FileEntry } from "../lib/api";
+import {
+  copyFile,
+  createDirectory,
+  createFile,
+  deleteItem,
+  listFiles,
+  renameItem,
+  type FileEntry,
+} from "../lib/api";
 import { formatBytes } from "../lib/utils";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
+import { PromptDialog } from "./PromptDialog";
 
 interface FileExplorerProps {
   selectedPath: string | null;
   onSelectFile: (path: string) => void;
+  onFileRemoved?: (path: string) => void;
+  onFileRenamed?: (oldPath: string, newPath: string) => void;
 }
 
-export function FileExplorer({ selectedPath, onSelectFile }: FileExplorerProps) {
+type ContextTarget =
+  | { kind: "entry"; entry: FileEntry }
+  | { kind: "background" };
+
+type PromptState =
+  | { type: "rename"; entry: FileEntry }
+  | { type: "newFile"; dirPath: string }
+  | { type: "newFolder"; dirPath: string };
+
+export function FileExplorer({
+  selectedPath,
+  onSelectFile,
+  onFileRemoved,
+  onFileRenamed,
+}: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState("");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set([""]));
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    target: ContextTarget;
+  } | null>(null);
+  const [prompt, setPrompt] = useState<PromptState | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadDir = useCallback(async (dirPath: string) => {
     setLoading(true);
@@ -51,6 +84,143 @@ export function FileExplorer({ selectedPath, onSelectFile }: FileExplorerProps) 
     });
   };
 
+  const joinPath = (dir: string, name: string) =>
+    dir ? `${dir}/${name}` : name;
+
+  const handleDelete = async (entry: FileEntry) => {
+    const label = entry.type === "directory" ? "folder" : "file";
+    if (!confirm(`Delete ${label} "${entry.name}"? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      setActionError(null);
+      await deleteItem(entry.path);
+      if (selectedPath === entry.path || selectedPath?.startsWith(entry.path + "/")) {
+        onFileRemoved?.(entry.path);
+      }
+      await loadDir(currentPath);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const handleRename = async (entry: FileEntry, newName: string) => {
+    try {
+      setActionError(null);
+      const result = await renameItem(entry.path, newName);
+      onFileRenamed?.(entry.path, result.path);
+      await loadDir(currentPath);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Rename failed");
+    }
+  };
+
+  const handleDuplicate = async (entry: FileEntry) => {
+    try {
+      setActionError(null);
+      await copyFile(entry.path);
+      await loadDir(currentPath);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Copy failed");
+    }
+  };
+
+  const handleCopyPath = (entryPath: string) => {
+    navigator.clipboard.writeText("/" + entryPath);
+  };
+
+  const handleCreateFile = async (dirPath: string, name: string) => {
+    try {
+      setActionError(null);
+      const filePath = joinPath(dirPath, name);
+      await createFile(filePath);
+      await loadDir(currentPath);
+      onSelectFile(filePath);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Create failed");
+    }
+  };
+
+  const handleCreateFolder = async (dirPath: string, name: string) => {
+    try {
+      setActionError(null);
+      await createDirectory(joinPath(dirPath, name));
+      await loadDir(currentPath);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Create failed");
+    }
+  };
+
+  const getContextMenuItems = (target: ContextTarget): ContextMenuItem[] => {
+    if (target.kind === "background") {
+      return [
+        {
+          label: "New File",
+          onClick: () => setPrompt({ type: "newFile", dirPath: currentPath }),
+        },
+        {
+          label: "New Folder",
+          onClick: () => setPrompt({ type: "newFolder", dirPath: currentPath }),
+        },
+        { label: "", onClick: () => {}, separator: true },
+        { label: "Refresh", onClick: () => loadDir(currentPath) },
+      ];
+    }
+
+    const { entry } = target;
+    const isDir = entry.type === "directory";
+    const items: ContextMenuItem[] = [
+      {
+        label: "Open",
+        onClick: () => {
+          if (isDir) {
+            loadDir(entry.path);
+            toggleDir(entry.path);
+          } else {
+            onSelectFile(entry.path);
+          }
+        },
+      },
+      {
+        label: "Rename",
+        onClick: () => setPrompt({ type: "rename", entry }),
+      },
+    ];
+
+    if (!isDir) {
+      items.push({ label: "Duplicate", onClick: () => handleDuplicate(entry) });
+    }
+
+    items.push({ label: "Copy Path", onClick: () => handleCopyPath(entry.path) });
+
+    if (isDir) {
+      items.push(
+        { label: "", onClick: () => {}, separator: true },
+        {
+          label: "New File",
+          onClick: () => setPrompt({ type: "newFile", dirPath: entry.path }),
+        },
+        {
+          label: "New Folder",
+          onClick: () => setPrompt({ type: "newFolder", dirPath: entry.path }),
+        },
+      );
+    }
+
+    items.push(
+      { label: "", onClick: () => {}, separator: true },
+      { label: "Delete", onClick: () => handleDelete(entry), danger: true },
+    );
+
+    return items;
+  };
+
+  const openContextMenu = (e: React.MouseEvent, target: ContextTarget) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, target });
+  };
+
   return (
     <div className="flex flex-col h-full border-r border-border bg-surface-raised">
       <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
@@ -74,12 +244,18 @@ export function FileExplorer({ selectedPath, onSelectFile }: FileExplorerProps) 
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1">
+      <div
+        className="flex-1 overflow-y-auto py-1"
+        onContextMenu={(e) => openContextMenu(e, { kind: "background" })}
+      >
         {loading && entries.length === 0 && (
           <p className="px-3 py-2 text-xs text-text-muted">Loading...</p>
         )}
         {error && (
           <p className="px-3 py-2 text-xs text-danger">{error}</p>
+        )}
+        {actionError && (
+          <p className="px-3 py-2 text-xs text-danger">{actionError}</p>
         )}
         {entries.map((entry) => (
           <ExplorerItem
@@ -91,9 +267,58 @@ export function FileExplorer({ selectedPath, onSelectFile }: FileExplorerProps) 
             onToggleDir={toggleDir}
             onSelectFile={onSelectFile}
             onNavigateDir={loadDir}
+            onContextMenu={(e) => openContextMenu(e, { kind: "entry", entry })}
           />
         ))}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems(contextMenu.target)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {prompt?.type === "rename" && (
+        <PromptDialog
+          title={`Rename ${prompt.entry.type}`}
+          defaultValue={prompt.entry.name}
+          confirmLabel="Rename"
+          onConfirm={(name) => {
+            handleRename(prompt.entry, name);
+            setPrompt(null);
+          }}
+          onCancel={() => setPrompt(null)}
+        />
+      )}
+
+      {prompt?.type === "newFile" && (
+        <PromptDialog
+          title="New File"
+          placeholder="filename.txt"
+          confirmLabel="Create"
+          onConfirm={(name) => {
+            handleCreateFile(prompt.dirPath, name);
+            setPrompt(null);
+          }}
+          onCancel={() => setPrompt(null)}
+        />
+      )}
+
+      {prompt?.type === "newFolder" && (
+        <PromptDialog
+          title="New Folder"
+          placeholder="folder-name"
+          confirmLabel="Create"
+          onConfirm={(name) => {
+            handleCreateFolder(prompt.dirPath, name);
+            setPrompt(null);
+          }}
+          onCancel={() => setPrompt(null)}
+        />
+      )}
     </div>
   );
 }
@@ -106,6 +331,7 @@ function ExplorerItem({
   onToggleDir,
   onSelectFile,
   onNavigateDir,
+  onContextMenu,
 }: {
   entry: FileEntry;
   depth: number;
@@ -114,6 +340,7 @@ function ExplorerItem({
   onToggleDir: (path: string) => void;
   onSelectFile: (path: string) => void;
   onNavigateDir: (path: string) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const isDir = entry.type === "directory";
   const isSelected = selectedPath === entry.path;
@@ -131,6 +358,7 @@ function ExplorerItem({
   return (
     <button
       onClick={handleClick}
+      onContextMenu={onContextMenu}
       className={`w-full flex items-center gap-1.5 px-2 py-1 text-left text-sm transition-colors ${
         isSelected
           ? "bg-accent/15 text-accent"

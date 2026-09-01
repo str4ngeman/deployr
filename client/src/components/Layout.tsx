@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 
 const navItems = [
   { to: "/editor", label: "File Editor", icon: FileIcon },
+  { to: "/logs", label: "Logs Viewer", icon: LogsIcon },
 ];
 
 export function Layout() {
@@ -76,6 +77,19 @@ function FileIcon() {
         strokeLinejoin="round"
       />
       <path d="M9 2v4h4" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function LogsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+      <path
+        d="M2 4h12M2 8h8M2 12h10"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

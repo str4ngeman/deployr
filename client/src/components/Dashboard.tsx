@@ -49,11 +49,11 @@ export function Dashboard() {
             available={false}
           />
           <ToolCard
-            to="#"
+            to="/logs"
             title="Logs Viewer"
             description="Stream logs from your running containers in real time."
             icon={<LogsIcon />}
-            available={false}
+            available
           />
           <ToolCard
             to="#"

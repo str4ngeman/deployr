@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "tsx watch server/index.ts",
+    "dev:server": "tsx watch --env-file=.env server/index.ts",
     "dev:client": "vite",
+    "docker:local": "docker compose -f docker-compose.local.yml up --build",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
@@ -25,6 +26,7 @@
     "@uiw/react-codemirror": "^4.23.12",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "dockerode": "^4.0.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.5"
@@ -32,6 +34,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.6",
     "@types/cors": "^2.8.17",
+    "@types/dockerode": "^3.3.38",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.8",
