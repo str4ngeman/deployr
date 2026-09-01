@@ -35,7 +35,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
     key: "ghcr.username",
     label: "GHCR username",
-    description: "GitHub username for pulling private images",
+    description: "Optional fallback if docker login is not configured on the host",
     type: "string",
     group: "GHCR",
     defaultValue: "",
@@ -43,7 +43,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
     key: "ghcr.token",
     label: "GHCR token",
-    description: "GitHub personal access token with read:packages scope",
+    description: "Optional fallback token (host docker login is used by default)",
     type: "secret",
     group: "GHCR",
     defaultValue: "",

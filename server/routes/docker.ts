@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import {
   getHiddenContainerIds,
-  getGhcrAuth,
 } from "../lib/db.js";
 import {
   checkDockerConnection,
@@ -87,24 +86,9 @@ router.post("/containers/:id/start", async (req: Request, res: Response) => {
 
 router.post("/containers/:id/pull", async (req: Request, res: Response) => {
   try {
-    const containers = await listContainers({ all: true });
-    const container = containers.find((c) => c.id === String(req.params.id));
-    if (!container) {
-      res.status(404).json({ error: "Container not found" });
-      return;
-    }
-
-    const auth = container.isGhcr ? getGhcrAuth() : null;
-    if (container.isGhcr && !auth) {
-      res.status(400).json({ error: "GHCR credentials not configured in Settings" });
-      return;
-    }
-
-    await pullImage(
-      container.image,
-      auth ? { username: auth.username, password: auth.token } : null,
-    );
-    res.json({ ok: true, message: `Pulled ${container.image}` });
+    const details = await inspectContainer(String(req.params.id));
+    await pullImage(details.image);
+    res.json({ ok: true, message: `Pulled ${details.image}` });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to pull image" });
   }
